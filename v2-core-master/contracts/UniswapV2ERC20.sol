@@ -89,7 +89,7 @@ contract UniswapV2ERC20 is IUniswapV2ERC20 {
 // 签名授权
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
         require(deadline >= block.timestamp, 'UniswapV2: EXPIRED');
-        // 签名原始数据
+        // 签名原始数据 nonces 自增
         bytes32 digest = keccak256(
             abi.encodePacked(
                 '\x19\x01',

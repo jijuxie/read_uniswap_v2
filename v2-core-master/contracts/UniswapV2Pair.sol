@@ -7,9 +7,11 @@ import './libraries/UQ112x112.sol';
 import './interfaces/IERC20.sol';
 import './interfaces/IUniswapV2Factory.sol';
 import './interfaces/IUniswapV2Callee.sol';
-
+// 继承了uniswap的erc20
 contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
+    // 安全数学
     using SafeMath  for uint;
+    // 独特uint224
     using UQ112x112 for uint224;
 
     uint public constant MINIMUM_LIQUIDITY = 10**3;
