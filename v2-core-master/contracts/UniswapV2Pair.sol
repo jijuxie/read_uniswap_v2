@@ -13,22 +13,28 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     using SafeMath  for uint;
     // 独特uint224
     using UQ112x112 for uint224;
-
+    // 设置最小流动性1000
     uint public constant MINIMUM_LIQUIDITY = 10**3;
+    // transfer 二进制码
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
-
+    // 工厂合约
     address public factory;
+    // token0合约
     address public token0;
+    // token1合约
     address public token1;
-
+    // token1的量
     uint112 private reserve0;           // uses single storage slot, accessible via getReserves
+    // token2的量
     uint112 private reserve1;           // uses single storage slot, accessible via getReserves
+    // z最后运行时间
     uint32  private blockTimestampLast; // uses single storage slot, accessible via getReserves
-
+    // token1
     uint public price0CumulativeLast;
     uint public price1CumulativeLast;
+    // k值
     uint public kLast; // reserve0 * reserve1, as of immediately after the most recent liquidity event
-
+    // pair合约锁 防重入，使用这个锁之后就没法反复调用一同一个合约方法了
     uint private unlocked = 1;
     modifier lock() {
         require(unlocked == 1, 'UniswapV2: LOCKED');
@@ -36,13 +42,13 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         _;
         unlocked = 1;
     }
-
+    // 读取数据
     function getReserves() public view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast) {
         _reserve0 = reserve0;
         _reserve1 = reserve1;
         _blockTimestampLast = blockTimestampLast;
     }
-
+    // 安全低级调用tranfer
     function _safeTransfer(address token, address to, uint value) private {
         (bool success, bytes memory data) = token.call(abi.encodeWithSelector(SELECTOR, to, value));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'UniswapV2: TRANSFER_FAILED');
@@ -61,41 +67,55 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     event Sync(uint112 reserve0, uint112 reserve1);
 
     constructor() public {
+        // 初始化工厂合约地址为调用者地址，调用者就是已部署的工厂合约
         factory = msg.sender;
     }
-
+    // 创建合约后被工厂合约初始化两个代币
     // called once by the factory at time of deployment
     function initialize(address _token0, address _token1) external {
         require(msg.sender == factory, 'UniswapV2: FORBIDDEN'); // sufficient check
         token0 = _token0;
         token1 = _token1;
     }
-
+    // 更新数据
     // update reserves and, on the first call per block, price accumulators
     function _update(uint balance0, uint balance1, uint112 _reserve0, uint112 _reserve1) private {
+        //balance0与balance1 小于等于最大值
         require(balance0 <= uint112(-1) && balance1 <= uint112(-1), 'UniswapV2: OVERFLOW');
+        // uint32(block.timestamp % 2**32)和uint32(block.timestamp)有什么区别
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
         uint32 timeElapsed = blockTimestamp - blockTimestampLast; // overflow is desired
+        // 必须有时间差 
         if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
             // * never overflows, and + overflow is desired
+            // 上次价格趋向
             price0CumulativeLast += uint(UQ112x112.encode(_reserve1).uqdiv(_reserve0)) * timeElapsed;
             price1CumulativeLast += uint(UQ112x112.encode(_reserve0).uqdiv(_reserve1)) * timeElapsed;
         }
+        // 更新最新的token量
         reserve0 = uint112(balance0);
         reserve1 = uint112(balance1);
+        // 更新上次 时间
         blockTimestampLast = blockTimestamp;
         emit Sync(reserve0, reserve1);
     }
 
     // if fee is on, mint liquidity equivalent to 1/6th of the growth in sqrt(k)
+    // 铸造费用
     function _mintFee(uint112 _reserve0, uint112 _reserve1) private returns (bool feeOn) {
+        // 工厂合约的feeTo 接受fee的账户
         address feeTo = IUniswapV2Factory(factory).feeTo();
+        // 返回值 如果工厂合约设置了接受账户那么返回true
         feeOn = feeTo != address(0);
+        // 上次k值
         uint _kLast = kLast; // gas savings
         if (feeOn) {
             if (_kLast != 0) {
+                // 取两token量相乘的平分 （新k值的平方）
                 uint rootK = Math.sqrt(uint(_reserve0).mul(_reserve1));
+                // 上次k值的平方
                 uint rootKLast = Math.sqrt(_kLast);
+                // 如果 当前 k比前k大（swap之后会有手续费回流到原lp的token之中 k值就会增大）
                 if (rootK > rootKLast) {
                     uint numerator = totalSupply.mul(rootK.sub(rootKLast));
                     uint denominator = rootK.mul(5).add(rootKLast);
@@ -104,6 +124,9 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
                 }
             }
         } else if (_kLast != 0) {
+            // 如果没有开启接受fee账户
+            // 并且上次k值不是0值
+            // 设置上次k值为0
             kLast = 0;
         }
     }
